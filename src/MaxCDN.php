@@ -6,126 +6,128 @@
  * @author Karlo Espiritu
  * @version 1.0 2012-09-21
 */
-class MaxCDN
-{
-    public $alias;
+class MaxCDN {
 
-    public $key;
+	public $alias;
 
-    public $secret;
+	public $key;
 
-    public $apiUrl;
+	public $secret;
+
+//	public $MaxCDNrws_url = 'https://rws.maxcdn.com';
+	public $MaxCDNrws_url = 'https://api.stackpath.com/v1';
 
     private $consumer;
 
-    public function __construct($alias, $key, $secret, $server = 'https://rws.maxcdn.com')
-    {
-        $this->alias  = $alias;
-        $this->key    = $key;
-        $this->secret = $secret;
-        $this->consumer = new \MaxCDN\OAuth\OAuthConsumer($key, $secret, null);
-        $this->apiUrl = $server;
-    }
+	public function __construct($alias, $key, $secret, $options=null) {
+		$this->alias  = $alias;
+		$this->key    = $key;
+		$this->secret = $secret;
+		$this->consumer = new \MaxCDN\OAuth\OAuthConsumer($key, $secret, NULL);
 
-    private function execute($selected_call, $method_type, $params)
-    {
-        // the endpoint for your request
-        $endpoint = "$this->apiUrl/$this->alias$selected_call";
+	}
 
-        //parse endpoint before creating OAuth request
-        $parsed = parse_url($endpoint);
-        if (array_key_exists("parsed", $parsed)) {
-            parse_str($parsed['query'], $params);
-        }
+	private function execute($selected_call, $method_type, $params) {
+		// the endpoint for your request
+		$endpoint = "$this->MaxCDNrws_url/$this->alias$selected_call";
 
-        //generate a request from your consumer
-        $req_req = \MaxCDN\OAuth\OAuthRequest::from_consumer_and_token(
-            $this->consumer,
-            null,
-            $method_type,
-            $endpoint,
-            $params
-        );
+		//parse endpoint before creating OAuth request
+		$parsed = parse_url($endpoint);
+		if (array_key_exists("parsed", $parsed))
+		{
+		    parse_str($parsed['query'], $params);
+		}
 
-        //sign your OAuth request using hmac_sha1
-        $sig_method = new \MaxCDN\OAuth\OAuthSignatureMethod_HMAC_SHA1();
-        $req_req->sign_request($sig_method, $this->consumer, null);
+		//generate a request from your consumer
+		$req_req = \MaxCDN\OAuth\OAuthRequest::from_consumer_and_token($this->consumer, NULL, $method_type, $endpoint, $params);
 
-        // create curl resource
-        $ch = curl_init();
+		//sign your OAuth request using hmac_sha1
+		$sig_method = new \MaxCDN\OAuth\OAuthSignatureMethod_HMAC_SHA1();
+		$req_req->sign_request($sig_method, $this->consumer, NULL);
 
-        // force curl http/1.1
-        curl_setopt($ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+		ob_start();
+		$out = fopen('php://output', 'w');
 
-        // set url
-        curl_setopt($ch, CURLOPT_URL, $req_req);
+		// create curl resource
+		$ch = curl_init();
 
-        //return the transfer as a string
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+		curl_setopt($ch, CURLOPT_VERBOSE, true);
+		curl_setopt($ch, CURLOPT_STDERR, $out);
 
-        // set curl timeout
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+		// set url
+		curl_setopt($ch, CURLOPT_URL, $req_req);
 
-        // set curl custom request type if not standard
-        if ($method_type != "GET" && $method_type != "POST") {
-            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method_type);
-        }
+		//return the transfer as a string
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER , TRUE);
 
-        if ($method_type == "POST" || $method_type == "PUT" || $method_type == "DELETE") {
-            $query_str = \MaxCDN\OAuth\OAuthUtil::build_http_query($params);
-            curl_setopt($ch, CURLOPT_HTTPHEADER, array('Expect:', 'Content-Length: ' . strlen($query_str)));
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $query_str);
-        }
+		// set curl timeout
+		curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 
-        // retrieve headers
-        curl_setopt($ch, CURLOPT_HEADER, 1);
-        curl_setopt($ch, CURLINFO_HEADER_OUT, 1);
+		// set curl custom request type if not standard
+		if ($method_type != "GET" && $method_type != "POST") {
+		    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method_type);
+		}
 
-        //set user agent
-        curl_setopt($ch, CURLOPT_USERAGENT, 'PHP MaxCDN API Client');
+		if ($method_type == "POST" || $method_type == "PUT" || $method_type == "DELETE") {
+		    $query_str = \MaxCDN\OAuth\OAuthUtil::build_http_query($params);
+		    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Expect:', 'Content-Length: ' . strlen($query_str)));
+		    curl_setopt($ch, CURLOPT_POSTFIELDS,  $query_str);
+		}
 
-        // make call
-        $result = curl_exec($ch);
-        $headers = curl_getinfo($ch);
-        $curl_error = curl_error($ch);
+		// retrieve headers
+		curl_setopt($ch, CURLOPT_HEADER, 1);
+		//curl_setopt($ch, CURLINFO_HEADER_OUT, 1);
 
-        // close curl resource to free up system resources
-        curl_close($ch);
+		//set user agent
+		curl_setopt($ch, CURLOPT_USERAGENT, 'PHP MaxCDN API Client');
 
-        // $json_output contains the output string
-        $json_output = substr($result, $headers['header_size']);
+		// make call
+		$result = curl_exec($ch);
+		$headers = curl_getinfo($ch);
+		$curl_error = curl_error($ch);
 
-        // catch errors
-        if (!empty($curl_error) || empty($json_output)) {
-            throw new \MaxCDN\RWSException(
-                "CURL ERROR: $curl_error, Output: $json_output",
-                $headers['http_code'],
-                null,
-                $headers
-            );
-        }
+		// close curl resource to free up system resources
+		curl_close($ch);
 
-        return $json_output;
-    }
+		fclose($out);
+		$debug = ob_get_clean();
 
-    public function get($selected_call, $params = array())
-    {
-        return $this->execute($selected_call, 'GET', $params);
-    }
+		// $json_output contains the output string
+		$json_output = substr($result, $headers['header_size']);
 
-    public function post($selected_call, $params = array())
-    {
-        return $this->execute($selected_call, 'POST', $params);
-    }
 
-    public function put($selected_call, $params = array())
-    {
-        return $this->execute($selected_call, 'PUT', $params);
-    }
+		// catch errors
+		if (!empty($curl_error) || empty($json_output)) {
+			fn_print_log(array(
+				'method' => 'MaxCDN::Execute()',
+				'selected_call' => $selected_call,
+				'method_type' => $method_type,
+				'params' => $params,
+				'headers' => $headers,
+				'result' => $result,
+				'debug' => $debug,
+			));
+			throw new \MaxCDN\RWSException("CURL ERROR: $curl_error, Output: $json_output", $headers['http_code'], null, $headers);
+		}
 
-    public function delete($selected_call, $params = array())
-    {
-        return $this->execute($selected_call, 'DELETE', $params);
-    }
+		return $json_output;
+	}
+
+	public function get($selected_call, $params = array()){
+
+		return $this->execute($selected_call, 'GET', $params);
+	}
+
+	public function post($selected_call, $params = array()){
+		return $this->execute($selected_call, 'POST', $params);
+	}
+
+	public function put($selected_call, $params = array()){
+		return $this->execute($selected_call, 'PUT', $params);
+	}
+
+	public function delete($selected_call, $params = array()){
+		return $this->execute($selected_call, 'DELETE', $params);
+	}
 }
